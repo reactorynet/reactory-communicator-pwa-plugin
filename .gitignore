@@ -1,0 +1,11 @@
+# Dependencies are resolved through the parent client (reactory-pwa-client),
+# which supplies @reactory/client-core/* via its own tsconfig/jest config.
+node_modules/
+dist/
+build/
+lib/
+coverage/
+
+# Editor / OS
+.DS_Store
+*.log
