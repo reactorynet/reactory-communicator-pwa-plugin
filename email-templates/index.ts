@@ -4,6 +4,17 @@ import EmailTemplatesPage from './EmailTemplatesPage';
 
 export { default as EmailTemplatesPage } from './EmailTemplatesPage';
 export type { EmailTemplatesPageProps } from './EmailTemplatesPage';
+
+// Editor surface (WP-3). Exported so a host can mount the drawer on its own page
+// rather than only through EmailTemplatesPage.
+export { default as TemplateEditorDrawer } from './components/TemplateEditorDrawer';
+export type { TemplateEditorDrawerProps } from './components/TemplateEditorDrawer';
+export { default as ElementEditor } from './components/ElementEditor';
+export { default as EjsSourcePane } from './components/EjsSourcePane';
+export { default as PreviewPane } from './components/PreviewPane';
+export { default as DetachConfirmDialog } from './components/DetachConfirmDialog';
+export { default as useElementDraft } from './hooks/useElementDraft';
+export { default as useTemplatePreview } from '../communicator/hooks/useTemplatePreview';
 export * from '../communicator/types';
 export * from '../communicator/graphql';
 

@@ -26,7 +26,14 @@ import EditIcon from '@mui/icons-material/Edit';
 import { useReactory } from '@reactory/client-core/api';
 
 import { useEmailTemplates } from '../communicator/hooks/useEmailTemplates';
-import { SCOPE_LEVEL_LABEL, scopeLevelOf, type IEmailTemplateElement } from '../communicator/types';
+import {
+  SCOPE_LEVEL_LABEL,
+  purposeForView,
+  scopeLevelOf,
+  type IEmailTemplateElement,
+  type IEmailTemplateView,
+} from '../communicator/types';
+import TemplateEditorDrawer from './components/TemplateEditorDrawer';
 
 /**
  * `communicator.EmailTemplates@1.0.0` — read-only list of transactional email
@@ -102,6 +109,7 @@ export const EmailTemplatesPage: React.FC<EmailTemplatesPageProps> = ({ reactory
   const reactory = propReactory || hookReactory;
 
   const [search, setSearch] = useState('');
+  const [editing, setEditing] = useState<IEmailTemplateView | null>(null);
 
   /**
    * The filter is memoised on the search term so the hook's `filterKey` is stable;
@@ -175,12 +183,13 @@ export const EmailTemplatesPage: React.FC<EmailTemplatesPageProps> = ({ reactory
                   <TableCell>Elements</TableCell>
                   <TableCell>Scope</TableCell>
                   <TableCell>Status</TableCell>
+                  <TableCell align="right">Edit</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {rows.length === 0 && !loading ? (
                   <TableRow>
-                    <TableCell colSpan={5}>
+                    <TableCell colSpan={6}>
                       <Typography variant="body2" color="text.secondary" sx={{ py: 3 }} align="center">
                         {search.trim()
                           ? `No templates match “${search.trim()}”.`
@@ -232,12 +241,32 @@ export const EmailTemplatesPage: React.FC<EmailTemplatesPageProps> = ({ reactory
                         variant="outlined"
                       />
                     </TableCell>
+                    <TableCell align="right">
+                      <Tooltip title="Edit subject and body">
+                        <IconButton
+                          size="small"
+                          aria-label={`Edit ${view.view}`}
+                          onClick={() => setEditing(view)}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </TableContainer>
         </Paper>
+
+        <TemplateEditorDrawer
+          open={editing !== null}
+          view={editing}
+          reactory={reactory}
+          purpose={purposeForView(editing?.view)}
+          onClose={() => setEditing(null)}
+          onSaved={reload}
+        />
 
         {loading && rows.length === 0 ? (
           <Stack direction="row" spacing={1.5} alignItems="center" role="status" aria-live="polite">

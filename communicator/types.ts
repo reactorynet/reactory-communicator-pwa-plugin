@@ -95,3 +95,18 @@ export const SCOPE_LEVEL_LABEL: Record<EmailTemplateScopeLevel, string> = {
   organization: 'Organization',
   businessUnit: 'Business unit',
 };
+
+/**
+ * Purpose hint for the server renderer, derived from the view slug.
+ *
+ * The preview needs a sample link (`resetLink`, `activationLink`) or the seeded
+ * bodies render with an empty `href`. The mapping is by slug prefix because that is
+ * how the seeded views are named; an unrecognised view simply previews without one
+ * rather than guessing.
+ */
+export const purposeForView = (view: string | undefined | null): string | undefined => {
+  const slug = String(view || '').toLowerCase();
+  if (slug.includes('forgot') || slug.includes('reset')) return 'password_reset';
+  if (slug.includes('activation') || slug.includes('register')) return 'registration';
+  return undefined;
+};
