@@ -96,6 +96,22 @@ describe('EmailTemplatesPage', () => {
     expect(document).not.toMatch(/query\s+CommunicatorTemplates\b/);
   });
 
+  it('uses a fetch policy that client.query() accepts', async () => {
+    // `cache-and-network` is a watchQuery/useQuery policy. Passing it to
+    // `client.query()` throws Apollo invariant 16, whose message names neither the
+    // policy nor the call — the page just renders "An error occurred!".
+    const reactory = makeReactory([view()]);
+    renderPage(reactory);
+
+    await waitFor(() => expect(reactory.graphqlQuery).toHaveBeenCalled());
+
+    const options = reactory.graphqlQuery.mock.calls[0][2] || {};
+    expect(options.fetchPolicy).not.toBe('cache-and-network');
+    expect(['cache-first', 'network-only', 'no-cache', 'cache-only']).toContain(
+      options.fetchPolicy,
+    );
+  });
+
   it('marks a file-backed body and an inline subject differently', async () => {
     renderPage(makeReactory([view()]));
 
