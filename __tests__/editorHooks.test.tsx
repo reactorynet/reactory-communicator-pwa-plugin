@@ -350,6 +350,103 @@ describe('useElementDraft — state that must not leak between elements', () => 
   });
 });
 
+describe('useElementDraft — an element that is absent or has no id', () => {
+  it('renders without an element, and without throwing', () => {
+    // The hook's signature allows null/undefined, so it must survive one. This used
+    // to throw: `errorState?.elementId === elementId` is `undefined === undefined`
+    // when both are absent, which is true, and the branch then read
+    // `errorState.message` off a null state.
+    const { result } = renderHook(() =>
+      useElementDraft({ graphqlMutation: jest.fn() } as any, null),
+    );
+
+    expect(result.current.draft).toBe('');
+    expect(result.current.error).toBeNull();
+    expect(result.current.lastOutcome).toBeNull();
+    expect(result.current.dirty).toBe(false);
+    expect(result.current.requiresDetach).toBe(false);
+  });
+
+  it('refuses to save an element with no id, rather than calling the server', async () => {
+    const graphqlMutation = jest.fn();
+    const { result } = renderHook(() =>
+      useElementDraft({ graphqlMutation } as any, {
+        id: '',
+        role: 'body',
+        format: 'html',
+        source: 'x',
+        isFileBacked: false,
+        isDetached: false,
+        enabled: true,
+      } as any),
+    );
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    expect(graphqlMutation).not.toHaveBeenCalled();
+  });
+
+  it('does not share a draft between two id-less elements', () => {
+    // `undefined === undefined` (and `'' === ''`) would make two distinct elements
+    // compare equal, so switching would carry one element's text into the other.
+    const reactory = { graphqlMutation: jest.fn() };
+    const noId = (source: string) =>
+      element({ id: '', role: 'body', source, name: 'Body' });
+
+    const { result, rerender } = renderHook(
+      ({ el }: any) => useElementDraft(reactory, el),
+      { initialProps: { el: noId('FIRST ELEMENT') } },
+    );
+
+    act(() => result.current.setDraft('EDITED FIRST'));
+
+    rerender({ el: noId('SECOND ELEMENT') });
+
+    expect(result.current.draft).toBe('SECOND ELEMENT');
+  });
+
+  it('clears the conversion notice on revert', async () => {
+    const graphqlMutation = jest.fn().mockResolvedValue({
+      data: {
+        communicatorSaveTemplateElement: {
+          success: true,
+          outcome: 'detached-and-saved',
+          element: {
+            id: 'body-1',
+            role: 'body',
+            format: 'html',
+            source: '<p>inline</p>',
+            isFileBacked: false,
+            isDetached: true,
+          },
+          error: null,
+        },
+      },
+    });
+
+    const { result } = renderHook(() =>
+      useElementDraft(
+        { graphqlMutation } as any,
+        element({ id: 'body-1', role: 'body', source: '$ref://body.ejs', isFileBacked: true }),
+      ),
+    );
+
+    act(() => result.current.setDraft('<p>inline</p>'));
+    await act(async () => {
+      await result.current.save({ detach: true });
+    });
+    expect(result.current.lastOutcome).toBe('detached-and-saved');
+
+    act(() => result.current.revert());
+
+    // "Last save converted this element from a file to inline content" must not
+    // outlive the edit it describes.
+    expect(result.current.lastOutcome).toBeNull();
+  });
+});
+
 describe('useTemplatePreview — races', () => {
   it('does not let a response for cleared source repopulate the pane', async () => {
     // THE regression review found: the empty-source branch returned without bumping

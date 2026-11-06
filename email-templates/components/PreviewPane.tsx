@@ -148,10 +148,17 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
       {header}
       {loading ? <LinearProgress sx={{ borderRadius: 1 }} /> : null}
 
-      <Typography variant="caption" color="text.secondary">
-        Remote images load over https only; scripts and forms are blocked. This is the
-        server-rendered output, not a client-side approximation.
-      </Typography>
+      {/*
+        Only for a rendered body. A subject element is a text box — there is no
+        iframe, no images and no forms, so the constraint sentence would be a claim
+        about nothing.
+      */}
+      {isSubject ? null : (
+        <Typography variant="caption" color="text.secondary">
+          Remote images load over https only; scripts and forms are blocked. This is the
+          server-rendered output, not a client-side approximation.
+        </Typography>
+      )}
 
       {isSubject ? (
         <Box

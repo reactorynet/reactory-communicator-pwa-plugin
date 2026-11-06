@@ -6,6 +6,18 @@ import {
 } from '../../communicator/graphql';
 import type { IEmailTemplateElement } from '../../communicator/types';
 
+/**
+ * Do two element ids refer to the same element?
+ *
+ * Not `a === b`: an absent id makes that true (`undefined === undefined`), and this
+ * hook's signature explicitly allows `null`/`undefined` elements. Before this was
+ * factored out, the same trap bit twice — the render crashed reading
+ * `errorState.message` off a `null` state, and `setDraft` wrote into state the
+ * render then discarded, dropping keystrokes on an id-less element.
+ */
+const sameId = (a: string | undefined, b: string | undefined): boolean =>
+  typeof a === 'string' && a.length > 0 && a === b;
+
 export interface SaveElementResult {
   ok: boolean;
   /** `saved` | `detached-and-saved`, when the server accepted the write. */
@@ -113,8 +125,13 @@ export const useElementDraft = (
   const [errorState, setErrorState] = useState<{ elementId: string | undefined; message: string } | null>(null);
   const [outcomeState, setOutcomeState] = useState<{ elementId: string | undefined; outcome: string } | null>(null);
 
-  const error = errorState?.elementId === elementId ? errorState.message : null;
-  const lastOutcome = outcomeState?.elementId === elementId ? outcomeState.outcome : null;
+  const error = errorState !== null && sameId(errorState.elementId, elementId)
+    ? errorState.message
+    : null;
+  const lastOutcome =
+    outcomeState !== null && sameId(outcomeState.elementId, elementId)
+      ? outcomeState.outcome
+      : null;
   const setError = useCallback(
     (message: string | null) => setErrorState(message === null ? null : { elementId, message }),
     [elementId],
@@ -143,17 +160,12 @@ export const useElementDraft = (
   }, []);
 
   /** Derive, don't sync. See the docblock. */
-  /**
-   * Keyed comparison, with a string check: two elements that both lack an id would
-   * otherwise compare equal (`undefined === undefined`) and share one draft.
-   */
-  const sameElement = typeof elementId === 'string' && state.elementId === elementId;
-  const current = sameElement ? state : freshState();
+  const current = sameId(state.elementId, elementId) ? state : freshState();
   const draft = current.draft;
   const acceptedSource = current.accepted;
 
   const currentElement =
-    savedElement && savedElement.id === elementId ? savedElement : element;
+    savedElement && sameId(savedElement.id, elementId) ? savedElement : element;
 
   const dirty = draft !== acceptedSource;
   const requiresDetach = Boolean(currentElement?.isFileBacked) && dirty;
@@ -161,7 +173,7 @@ export const useElementDraft = (
   const setDraft = useCallback(
     (value: string) => {
       setState((previous) => {
-        const base = previous.elementId === elementId ? previous : freshState();
+        const base = sameId(previous.elementId, elementId) ? previous : freshState();
         return { ...base, draft: value };
       });
       setError(null);
@@ -261,12 +273,12 @@ export const useElementDraft = (
         if (mountedRef.current !== false) setSaving(false);
       }
     },
-    [reactory, elementId, draft, element],
+    [reactory, elementId, draft, element, currentElement],
   );
 
   const revert = useCallback(() => {
     setState((previous) => {
-      const base = previous.elementId === elementId ? previous : freshState();
+      const base = sameId(previous.elementId, elementId) ? previous : freshState();
       return { ...base, draft: base.accepted };
     });
     // The conversion notice belongs to a save that is no longer the working state.
