@@ -106,10 +106,18 @@ export const useTemplatePreview = (
       // Nothing to render yet. Clearing beats showing the previous element's output
       // next to an empty editor.
       //
-      // Bumping the sequence is load-bearing: without it an in-flight request for
-      // the source the operator just deleted still passes the guard below and
-      // repopulates the pane — and `stale` says false, so the pane asserts it is
-      // current. That is the exact failure this hook exists to prevent.
+      // Bumping the sequence here addresses the case the request guard alone does
+      // not: an in-flight request for the source the operator just DELETED still
+      // resolves, and without this it repopulates the pane and reports
+      // `stale: false` — the pane asserting it is current. That is the exact
+      // failure this hook exists to prevent.
+      //
+      // The effect teardown below bumps the sequence as well, so this line is
+      // redundant in the normal flow (a source change always tears the effect down
+      // first). It is kept because the invariant then holds locally: the branch
+      // that decides "there is nothing to render" invalidates outstanding work
+      // whether or not a host's effect ordering cooperates. Mutation-checked —
+      // removing EITHER one alone leaves the tests green; removing both fails.
       sequenceRef.current += 1;
       setPreview(null);
       setError(null);
