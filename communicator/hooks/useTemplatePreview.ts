@@ -105,8 +105,15 @@ export const useTemplatePreview = (
     if (useDraft && sourceKey.trim().length === 0) {
       // Nothing to render yet. Clearing beats showing the previous element's output
       // next to an empty editor.
+      //
+      // Bumping the sequence is load-bearing: without it an in-flight request for
+      // the source the operator just deleted still passes the guard below and
+      // repopulates the pane — and `stale` says false, so the pane asserts it is
+      // current. That is the exact failure this hook exists to prevent.
+      sequenceRef.current += 1;
       setPreview(null);
       setError(null);
+      setLoading(false);
       setRenderedKey(requestKey);
       return;
     }
@@ -163,11 +170,18 @@ export const useTemplatePreview = (
 
     if (!useDraft) {
       run();
-      return undefined;
+      // Invalidate on teardown: an unmounted or suspended editor's late response
+      // must not land, regardless of what the host does with the result.
+      return () => {
+        sequenceRef.current += 1;
+      };
     }
 
     const timer = setTimeout(run, debounceMs);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      sequenceRef.current += 1;
+    };
   }, [run, useDraft, debounceMs, manualNonce, enabled]);
 
   const refresh = useCallback(() => setManualNonce((value) => value + 1), []);
@@ -176,7 +190,9 @@ export const useTemplatePreview = (
     preview,
     loading,
     error,
-    stale: renderedKey !== requestKey && useDraft && sourceKey.trim().length > 0,
+    // `preview !== null` matters: without it the pane shows "out of date" beside an
+    // empty iframe on first render, before anything has been asked for.
+    stale: preview !== null && renderedKey !== requestKey && useDraft && sourceKey.trim().length > 0,
     refresh,
   };
 };

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { COMMUNICATOR_SAVE_TEMPLATE_ELEMENT, TEMPLATE_EDITOR_ERRORS } from '../../communicator/graphql';
+import {
+  COMMUNICATOR_SAVE_TEMPLATE_ELEMENT,
+  TEMPLATE_EDITOR_ERRORS,
+} from '../../communicator/graphql';
 import type { IEmailTemplateElement } from '../../communicator/types';
 
 export interface SaveElementResult {
@@ -26,6 +29,21 @@ export interface UseElementDraftResult {
   revert: () => void;
   /** Outcome of the last successful save, e.g. `detached-and-saved`. */
   lastOutcome: string | null;
+  /**
+   * The element as the server last described it.
+   *
+   * `undefined` until a save succeeds. It differs from the `element` argument in the
+   * one way that matters here: after a detach the server returns
+   * `isFileBacked: false`, and without adopting that the editor keeps warning about
+   * a file it no longer reads and asks to detach a second time.
+   */
+  currentElement: IEmailTemplateElement | null | undefined;
+}
+
+interface DraftState {
+  elementId: string | undefined;
+  draft: string;
+  accepted: string;
 }
 
 /**
@@ -35,19 +53,28 @@ export interface UseElementDraftResult {
  *
  * A `$ref://` element's `source` is a pointer to a file in the repository, not
  * content. The server refuses to overwrite one unless the caller passes
- * `detach: true`, and this hook surfaces that as `requiresDetach` so the UI can
- * ask first. Saving without asking would silently fork the shipped template for
- * one application, with the file left on disk and no record anywhere that it is no
+ * `detach: true`, and this hook surfaces that as `requiresDetach` so the UI can ask
+ * first. Saving without asking would silently fork the shipped template for one
+ * application, with the file left on disk and no record anywhere that it is no
  * longer in use.
  *
- * `save({ detach: true })` performs the conversion; the server records
- * `props.detachedFromRef` so the fork stays visible.
+ * ## Why the state is keyed during render, not in an effect
  *
- * ## Why the baseline moves on success
+ * An effect that resets on `[elementId, baseline]` produces one commit in which the
+ * NEW element's id is paired with the PREVIOUS element's draft. Save in that commit
+ * writes one element's content to another document — the worst possible outcome
+ * here. Deriving during render closes the window entirely:
  *
- * `dirty` is measured against what the server last accepted, not against mount-time
- * props. Without that, a successful save still looks dirty, and closing the drawer
- * would prompt about changes that were already written.
+ *     const current = state.elementId === elementId ? state : freshState()
+ *
+ * The drawer also remounts each editor per element id, so it was never exposed;
+ * but `useElementDraft` and `ElementEditor` are exported for hosts, and a host that
+ * renders `ElementEditor` without a key gets the bug. Relying on a caller's `key`
+ * for correctness is not a contract.
+ *
+ * It also fixes the second failure the effect caused: when a host refreshed the
+ * element after a save, a *dirty* draft was silently replaced by the saved baseline,
+ * the dirty indicator cleared, and the close guard stopped firing.
  */
 export const useElementDraft = (
   reactory: any,
@@ -56,8 +83,23 @@ export const useElementDraft = (
   const baseline = element?.source ?? '';
   const elementId = element?.id;
 
-  const [draft, setDraftState] = useState<string>(baseline);
-  const [acceptedSource, setAcceptedSource] = useState<string>(baseline);
+  const freshState = useCallback(
+    (): DraftState => ({ elementId, draft: baseline, accepted: baseline }),
+    [elementId, baseline],
+  );
+
+  const [state, setState] = useState<DraftState>(freshState);
+
+  /**
+   * Element as the server last described it, adopted after a save.
+   *
+   * Scoped to the id it was returned for, so a stale adoption cannot leak onto a
+   * different element.
+   */
+  const [savedElement, setSavedElement] = useState<IEmailTemplateElement | null | undefined>(
+    undefined,
+  );
+
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [lastOutcome, setLastOutcome] = useState<string | null>(null);
@@ -71,25 +113,27 @@ export const useElementDraft = (
     };
   }, []);
 
-  /**
-   * A different element means a different draft. Keyed on id so switching tabs does
-   * not carry one element's edits into another — the bug that would be worst here,
-   * because it would write them to the wrong document.
-   */
-  useEffect(() => {
-    setDraftState(baseline);
-    setAcceptedSource(baseline);
-    setError(null);
-    setLastOutcome(null);
-  }, [elementId, baseline]);
+  /** Derive, don't sync. See the docblock. */
+  const current = state.elementId === elementId ? state : freshState();
+  const draft = current.draft;
+  const acceptedSource = current.accepted;
 
-  const setDraft = useCallback((value: string) => {
-    setDraftState(value);
-    setError(null);
-  }, []);
+  const currentElement =
+    savedElement && savedElement.id === elementId ? savedElement : element;
 
   const dirty = draft !== acceptedSource;
-  const requiresDetach = Boolean(element?.isFileBacked) && dirty;
+  const requiresDetach = Boolean(currentElement?.isFileBacked) && dirty;
+
+  const setDraft = useCallback(
+    (value: string) => {
+      setState((previous) => {
+        const base = previous.elementId === elementId ? previous : freshState();
+        return { ...base, draft: value };
+      });
+      setError(null);
+    },
+    [elementId, freshState],
+  );
 
   const save = useCallback(
     async (options: { detach?: boolean } = {}): Promise<SaveElementResult> => {
@@ -113,11 +157,11 @@ export const useElementDraft = (
       setError(null);
 
       try {
-        const input: Record<string, any> = { elementId, source: draft };
-        if (options.detach === true) input.detach = true;
-
+        // `detach` is always sent. The schema field is nullable so omitting it works
+        // today, but a later tightening to `Boolean!` would make every inline save
+        // fail variable validation — a silent, total loss of saving.
         const result: any = await reactory.graphqlMutation(COMMUNICATOR_SAVE_TEMPLATE_ELEMENT, {
-          input,
+          input: { elementId, source: draft, detach: options.detach === true },
         });
 
         if (mountedRef.current === false) return { ok: false, message: 'Unmounted' };
@@ -140,9 +184,22 @@ export const useElementDraft = (
 
         const savedSource = payload?.element?.source ?? draft;
 
-        setAcceptedSource(savedSource);
-        setDraftState(savedSource);
+        setState({ elementId, draft: savedSource, accepted: savedSource });
         setLastOutcome(payload?.outcome ?? 'saved');
+
+        /**
+         * Adopt the server's view of the element. `isFileBacked` is the field that
+         * changes on a detach; without this the pane keeps warning about a file the
+         * element no longer reads and offers to convert it again.
+         *
+         * Merged over the prop rather than replacing it: the mutation returns a
+         * narrow selection (no `refPath`, `refError`, `enabled`), and dropping those
+         * would blank the file-backed warning for an element that is still
+         * file-backed.
+         */
+        if (payload?.element) {
+          setSavedElement({ ...(element as IEmailTemplateElement), ...payload.element });
+        }
 
         return { ok: true, outcome: payload?.outcome };
       } catch (err: any) {
@@ -154,13 +211,18 @@ export const useElementDraft = (
         if (mountedRef.current !== false) setSaving(false);
       }
     },
-    [reactory, elementId, draft],
+    [reactory, elementId, draft, element],
   );
 
   const revert = useCallback(() => {
-    setDraftState(acceptedSource);
+    setState((previous) => {
+      const base = previous.elementId === elementId ? previous : freshState();
+      return { ...base, draft: base.accepted };
+    });
+    // The conversion notice belongs to a save that is no longer the working state.
+    setLastOutcome(null);
     setError(null);
-  }, [acceptedSource]);
+  }, [elementId, freshState]);
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -176,8 +238,21 @@ export const useElementDraft = (
       save,
       revert,
       lastOutcome,
+      currentElement,
     }),
-    [draft, setDraft, dirty, saving, error, clearError, requiresDetach, save, revert, lastOutcome],
+    [
+      draft,
+      setDraft,
+      dirty,
+      saving,
+      error,
+      clearError,
+      requiresDetach,
+      save,
+      revert,
+      lastOutcome,
+      currentElement,
+    ],
   );
 };
 

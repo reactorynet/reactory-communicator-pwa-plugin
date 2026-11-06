@@ -3,13 +3,13 @@ import {
   Alert,
   Box,
   CircularProgress,
+  IconButton,
   LinearProgress,
   Stack,
   Tooltip,
   Typography,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import { IconButton } from '@mui/material';
 
 import type { IEmailTemplatePreviewResult } from '../../communicator/hooks/useTemplatePreview';
 
@@ -22,6 +22,20 @@ export interface PreviewPaneProps {
   role: string;
   onRefresh?: () => void;
 }
+
+/**
+ * Constrain what rendered email may load.
+ *
+ * `sandbox=""` already blocks scripts and same-origin access, but it does not stop
+ * a remote image, a remote stylesheet, or `<meta http-equiv="refresh">` navigating
+ * the frame. A CSP `default-src 'none'` makes the pane inert except for inline
+ * styles (which email HTML relies on) and inline data images.
+ */
+const PREVIEW_CSP =
+  "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:;";
+
+const previewDocument = (body: string): string =>
+  `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}"><base target="_blank"></head><body style="margin:0;padding:12px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif">${body}</body></html>`;
 
 /**
  * Server-rendered preview of one element.
@@ -60,47 +74,63 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
     return preview.html || preview.text || '';
   }, [preview, isSubject]);
 
+  /**
+   * The header renders for the error state too: losing Refresh exactly when a retry
+   * is needed leaves the operator with no way to retry a transient failure except
+   * by editing the draft.
+   */
+  const header = (
+    <Stack direction="row" alignItems="center" justifyContent="space-between">
+      <Typography variant="subtitle2" color="text.secondary">
+        Preview {isSubject ? '(subject line)' : '(as the recipient sees it)'}
+      </Typography>
+
+      <Stack direction="row" spacing={1} alignItems="center">
+        {stale ? (
+          <Typography variant="caption" color="warning.main">
+            out of date
+          </Typography>
+        ) : null}
+        {onRefresh ? (
+          <Tooltip title="Re-render">
+            <span>
+              <IconButton
+                size="small"
+                onClick={onRefresh}
+                disabled={loading}
+                aria-label="Re-render preview"
+              >
+                {loading ? <CircularProgress size={16} /> : <RefreshIcon fontSize="small" />}
+              </IconButton>
+            </span>
+          </Tooltip>
+        ) : null}
+      </Stack>
+    </Stack>
+  );
+
   if (error) {
     return (
-      <Alert severity="error" role="alert">
-        <Typography variant="subtitle2" gutterBottom>
-          The preview could not be rendered
-        </Typography>
-        <Typography variant="body2" component="div">
-          {error}
-        </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-          The template is still saved as it was — a render failure here does not change it.
-        </Typography>
-      </Alert>
+      <Stack spacing={1} sx={{ minWidth: 0 }}>
+        {header}
+        <Alert severity="error" role="alert">
+          <Typography variant="subtitle2" gutterBottom>
+            The preview could not be rendered
+          </Typography>
+          <Typography variant="body2" component="div">
+            {error}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+            The template is still saved as it was — a render failure here does not change it.
+          </Typography>
+        </Alert>
+      </Stack>
     );
   }
 
   return (
     <Stack spacing={1} sx={{ minWidth: 0 }}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between">
-        <Typography variant="subtitle2" color="text.secondary">
-          Preview {isSubject ? '(subject line)' : '(as the recipient sees it)'}
-        </Typography>
-
-        <Stack direction="row" spacing={1} alignItems="center">
-          {stale ? (
-            <Typography variant="caption" color="warning.main">
-              out of date
-            </Typography>
-          ) : null}
-          {onRefresh ? (
-            <Tooltip title="Re-render">
-              <span>
-                <IconButton size="small" onClick={onRefresh} disabled={loading} aria-label="Re-render preview">
-                  {loading ? <CircularProgress size={16} /> : <RefreshIcon fontSize="small" />}
-                </IconButton>
-              </span>
-            </Tooltip>
-          ) : null}
-        </Stack>
-      </Stack>
-
+      {header}
       {loading ? <LinearProgress sx={{ borderRadius: 1 }} /> : null}
 
       {isSubject ? (
@@ -123,7 +153,12 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
           component="iframe"
           title="Template preview"
           sandbox=""
-          srcDoc={body}
+          // `sandbox=""` blocks scripts, but tenant-authored HTML can still cause
+          // outbound requests (<img>, remote CSS) and `<meta http-equiv="refresh">`
+          // can navigate the iframe itself to a remote page inside a pane the
+          // operator trusts. A CSP prefix plus no-referrer stops both cheaply.
+          referrerPolicy="no-referrer"
+          srcDoc={previewDocument(body)}
           sx={{
             width: '100%',
             minHeight: 320,

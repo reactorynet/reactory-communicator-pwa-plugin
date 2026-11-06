@@ -45,8 +45,27 @@ export const ElementEditor: React.FC<ElementEditorProps> = ({
   requestDetach,
   previewEnabled = true,
 }) => {
-  const { draft, setDraft, dirty, saving, error, requiresDetach, save, revert, lastOutcome } =
-    useElementDraft(reactory, element);
+  const {
+    draft,
+    setDraft,
+    dirty,
+    saving,
+    error,
+    requiresDetach,
+    save,
+    revert,
+    lastOutcome,
+    currentElement,
+  } = useElementDraft(reactory, element);
+
+  /**
+   * The element as the SERVER last described it (falls back to the prop).
+   *
+   * After a detach the server returns `isFileBacked: false`; rendering the prop
+   * would keep the "read from a file" warning on screen and offer to convert an
+   * element that has already been converted.
+   */
+  const shown = currentElement ?? element;
 
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
 
@@ -86,25 +105,25 @@ export const ElementEditor: React.FC<ElementEditorProps> = ({
     <Stack spacing={2}>
       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
         <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-          {element.name || element.role}
+          {shown.name || shown.role}
         </Typography>
-        <Chip size="small" variant="outlined" label={element.role} />
-        <Chip size="small" variant="outlined" label={element.format} />
-        {element.isFileBacked ? (
+        <Chip size="small" variant="outlined" label={shown.role} />
+        <Chip size="small" variant="outlined" label={shown.format} />
+        {shown.isFileBacked ? (
           <Chip size="small" color="info" variant="outlined" label="from file" />
         ) : (
           <Chip
             size="small"
-            color={element.isDetached ? 'secondary' : 'default'}
+            color={shown.isDetached ? 'secondary' : 'default'}
             variant="outlined"
-            label={element.isDetached ? 'inline (detached)' : 'inline'}
+            label={shown.isDetached ? 'inline (detached)' : 'inline'}
           />
         )}
       </Stack>
 
       {dirty ? (
         <Alert severity="warning" icon={false}>
-          Unsaved changes to this {element.role}.
+          Unsaved changes to this {shown.role}.
         </Alert>
       ) : null}
 
@@ -128,14 +147,14 @@ export const ElementEditor: React.FC<ElementEditorProps> = ({
           alignItems: 'start',
         }}
       >
-        <EjsSourcePane element={element} value={draft} onChange={setDraft} disabled={saving} />
+        <EjsSourcePane element={shown} value={draft} onChange={setDraft} disabled={saving} />
 
         <PreviewPane
           preview={preview}
           loading={loading}
           error={previewError}
           stale={stale}
-          role={element.role}
+          role={shown.role}
           onRefresh={refresh}
         />
       </Box>

@@ -68,7 +68,9 @@ export const EjsSourcePane: React.FC<EjsSourcePaneProps> = ({
       ) : null}
 
       <CodeEditorPane
-        language="html"
+        // A `text` element is a plain-text subject line; highlighting it as HTML
+        // colours `Hi, {{firstName}}` as if it were markup.
+        language={isHtml ? 'html' : 'text'}
         value={value}
         onChange={onChange}
         disabled={disabled}
