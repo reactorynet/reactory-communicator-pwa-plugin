@@ -7,7 +7,6 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
-  Divider,
   Drawer,
   IconButton,
   Stack,
@@ -54,6 +53,7 @@ export const TemplateEditorDrawer: React.FC<TemplateEditorDrawerProps> = ({
   purpose,
   onSaved,
 }) => {
+  const viewId = view?.id ?? null;
   const elements: IEmailTemplateElement[] = useMemo(() => {
     if (!view) return [];
     return [view.subject, view.body, ...view.otherElements].filter(
@@ -62,7 +62,10 @@ export const TemplateEditorDrawer: React.FC<TemplateEditorDrawerProps> = ({
   }, [view]);
 
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [dirtyIds, setDirtyIds] = useState<Record<string, boolean>>({});
+  const [dirtyState, setDirtyState] = useState<{
+    viewId: string | null;
+    ids: Record<string, boolean>;
+  }>({ viewId, ids: {} });
   const [confirmClose, setConfirmClose] = useState<boolean>(false);
 
   /** Pending detach confirmation: the element and the promise's resolve. */
@@ -79,9 +82,7 @@ export const TemplateEditorDrawer: React.FC<TemplateEditorDrawerProps> = ({
    * survive concurrent rendering. `dirtyViewId` records which view the flags belong
    * to, so a mismatch is derived away during render instead of corrected after it.
    */
-  const viewId = view?.id ?? null;
-  const [dirtyViewId, setDirtyViewId] = useState<string | null>(viewId);
-  const dirtyIdsForView = dirtyViewId === viewId ? dirtyIds : {};
+  const dirtyIdsForView = dirtyState.viewId === viewId ? dirtyState.ids : {};
 
   const [activeViewId, setActiveViewId] = useState<string | null>(viewId);
   const activeIdForView = activeViewId === viewId ? activeId : null;
@@ -89,15 +90,22 @@ export const TemplateEditorDrawer: React.FC<TemplateEditorDrawerProps> = ({
   const resolvedActiveId = activeIdForView ?? elements[0]?.id ?? null;
   const anyDirty = Object.values(dirtyIdsForView).some(Boolean);
 
+  /**
+   * One reducer for the key check and the write.
+   *
+   * Doing `setDirtyIds(fn)` and then `setDirtyViewId(viewId)` separately let two
+   * reports in one batch both take the "different view" branch, so the first was
+   * dropped. Atomic here because `viewId` is captured in the update, not read after.
+   */
   const handleDirtyChange = useCallback(
     (elementId: string, dirty: boolean) => {
-      setDirtyIds((current) => {
-        if (dirtyViewId === viewId && current[elementId] === dirty) return current;
-        return { ...(dirtyViewId === viewId ? current : {}), [elementId]: dirty };
-      });
-      setDirtyViewId(viewId);
+      setDirtyState((current) =>
+        current.viewId === viewId
+          ? { viewId, ids: { ...current.ids, [elementId]: dirty } }
+          : { viewId, ids: { [elementId]: dirty } },
+      );
     },
-    [dirtyViewId, viewId],
+    [viewId],
   );
 
   const requestDetach = useCallback((element: IEmailTemplateElement): Promise<boolean> => {

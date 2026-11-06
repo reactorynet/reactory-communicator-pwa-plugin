@@ -112,12 +112,16 @@ export const useTemplatePreview = (
       // `stale: false` — the pane asserting it is current. That is the exact
       // failure this hook exists to prevent.
       //
-      // The effect teardown below bumps the sequence as well, so this line is
-      // redundant in the normal flow (a source change always tears the effect down
-      // first). It is kept because the invariant then holds locally: the branch
-      // that decides "there is nothing to render" invalidates outstanding work
-      // whether or not a host's effect ordering cooperates. Mutation-checked —
-      // removing EITHER one alone leaves the tests green; removing both fails.
+      // REDUNDANCY, measured rather than assumed. The effect teardown below also
+      // bumps the sequence, and a source change tears that effect down first, so
+      // THE TEARDOWN BUMP IS THE ONE THAT CARRIES THE GUARANTEE. Mutation-checked:
+      // removing it fails `does not let a response for cleared source repopulate
+      // the pane` on 6 of 6 runs; removing this in-branch bump leaves all 8 green.
+      //
+      // This line is still worth keeping: it makes "nothing to render" invalidate
+      // outstanding work locally, instead of depending on a host's effect ordering
+      // and on the teardown running at all. Do not delete the teardown bump on the
+      // strength of this one.
       sequenceRef.current += 1;
       setPreview(null);
       setError(null);

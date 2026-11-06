@@ -118,13 +118,7 @@ export const COMMUNICATOR_SAVE_TEMPLATE_ELEMENT = `
       success
       outcome
       element {
-        id
-        role
-        format
-        source
-        isFileBacked
-        isDetached
-        updatedAt
+        ${ELEMENT_FIELDS}
       }
       error {
         code

@@ -28,14 +28,29 @@ export interface PreviewPaneProps {
  *
  * `sandbox=""` already blocks scripts and same-origin access, but it does not stop
  * a remote image, a remote stylesheet, or `<meta http-equiv="refresh">` navigating
- * the frame. A CSP `default-src 'none'` makes the pane inert except for inline
- * styles (which email HTML relies on) and inline data images.
+ * the frame. `default-src 'none'` makes the pane inert except for inline styles
+ * (which email HTML relies on) and images.
+ *
+ * `img-src` allows `https:` deliberately. Blocking it is a defensible privacy
+ * choice, but a designed email's hosted logo then renders broken — and "my template
+ * is broken" is exactly the false alarm the preview exists to prevent. `http:` and
+ * `cid:` stay blocked. If tracking pixels become a concern, tighten this and say so
+ * on the pane, rather than leaving the operator to debug a non-bug.
  */
 const PREVIEW_CSP =
-  "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:;";
+  "default-src 'none'; img-src data: https:; style-src 'unsafe-inline'; font-src data:;";
 
+/**
+ * Wrap rendered content in a document that carries the CSP.
+ *
+ * Padding and typography go on an INNER `div`, never on `<body>`. A full-document
+ * email arrives with its own `<body style="…">`, and per spec a duplicate `<body>`
+ * start tag merges attributes only where absent — so what wins becomes
+ * parser-dependent (Chrome and jsdom disagreed in review). Leaving `<body>` alone
+ * means the email's own styling always applies.
+ */
 const previewDocument = (body: string): string =>
-  `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}"><base target="_blank"></head><body style="margin:0;padding:12px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif">${body}</body></html>`;
+  `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}"><base target="_blank"></head><body style="margin:0"><div style="padding:12px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif">${body}</div></body></html>`;
 
 /**
  * Server-rendered preview of one element.
@@ -132,6 +147,11 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
     <Stack spacing={1} sx={{ minWidth: 0 }}>
       {header}
       {loading ? <LinearProgress sx={{ borderRadius: 1 }} /> : null}
+
+      <Typography variant="caption" color="text.secondary">
+        Remote images load over https only; scripts and forms are blocked. This is the
+        server-rendered output, not a client-side approximation.
+      </Typography>
 
       {isSubject ? (
         <Box

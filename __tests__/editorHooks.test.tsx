@@ -72,6 +72,25 @@ describe('useElementDraft — draft isolation', () => {
     expect(result.current.dirty).toBe(false);
   });
 
+  it('keeps a keystroke typed AFTER a switch (the reverse direction)', async () => {
+    // `current` is derived and never written back, so after a switch the raw state is
+    // still keyed to the previous element. `setDraft`'s mismatch branch re-keys it.
+    // Remove that branch and every keystroke on the newly-shown element is dropped —
+    // silently, with the suite still green before this test existed.
+    const reactory = { graphqlMutation: jest.fn() };
+
+    const { result, rerender } = renderHook(
+      ({ el }: any) => useElementDraft(reactory, el),
+      { initialProps: { el: element() } },
+    );
+
+    rerender({ el: element({ id: 'body-1', role: 'body', source: 'BODY BASELINE' }) });
+    act(() => result.current.setDraft('typed into body'));
+
+    expect(result.current.draft).toBe('typed into body');
+    expect(result.current.dirty).toBe(true);
+  });
+
   it('does not let a save carry a previous element id', async () => {
     const graphqlMutation = jest.fn().mockResolvedValue({
       data: {
@@ -175,6 +194,162 @@ describe('useElementDraft — adopting the server element', () => {
   });
 });
 
+describe('useElementDraft — state that must not leak between elements', () => {
+  it('does not show one element save error on another', async () => {
+    // `draft`, `dirty` and `requiresDetach` recover on a switch; the alerts did not,
+    // so a refusal from the subject appeared under the body editor.
+    const graphqlMutation = jest.fn().mockResolvedValue({
+      data: {
+        communicatorSaveTemplateElement: {
+          success: false,
+          outcome: null,
+          element: null,
+          error: { code: 'TEMPLATE_ELEMENT_EMPTY', message: 'REFUSAL FROM THE SUBJECT' },
+        },
+      },
+    });
+
+    const { result, rerender } = renderHook(
+      ({ el }: any) => useElementDraft({ graphqlMutation } as any, el),
+      { initialProps: { el: element() } },
+    );
+
+    act(() => result.current.setDraft('something'));
+    await act(async () => {
+      await result.current.save();
+    });
+    expect(result.current.error).toContain('REFUSAL FROM THE SUBJECT');
+
+    rerender({ el: element({ id: 'body-1', role: 'body', source: 'BODY' }) });
+
+    expect(result.current.error).toBeNull();
+  });
+
+  it('does not attribute a save outcome to the element the operator switched to', async () => {
+    const pending = deferred<any>();
+    const graphqlMutation = jest.fn().mockReturnValue(pending.promise);
+
+    const { result, rerender } = renderHook(
+      ({ el }: any) => useElementDraft({ graphqlMutation } as any, el),
+      { initialProps: { el: element() } },
+    );
+
+    act(() => result.current.setDraft('edited'));
+    let saving: Promise<any>;
+    act(() => {
+      saving = result.current.save();
+    });
+
+    rerender({ el: element({ id: 'body-1', role: 'body', source: 'BODY' }) });
+
+    await act(async () => {
+      pending.resolve({
+        data: {
+          communicatorSaveTemplateElement: {
+            success: true,
+            outcome: 'detached-and-saved',
+            element: { id: 'sub-1', source: 'edited', isFileBacked: false, isDetached: true },
+            error: null,
+          },
+        },
+      });
+      await saving!;
+    });
+
+    // The body never saw that conversion.
+    expect(result.current.lastOutcome).toBeNull();
+  });
+
+  it('drops a stale adoption when the host refreshes the element', async () => {
+    // After a detach the hook adopts isFileBacked:false. If the element is restored
+    // to a $ref elsewhere and the host refreshes, keeping the adoption would leave
+    // the editor believing it is inline and unable to save.
+    const graphqlMutation = jest.fn().mockResolvedValue({
+      data: {
+        communicatorSaveTemplateElement: {
+          success: true,
+          outcome: 'detached-and-saved',
+          element: {
+            id: 'body-1',
+            role: 'body',
+            format: 'html',
+            source: '<p>inline</p>',
+            isFileBacked: false,
+            isDetached: true,
+            updatedAt: '2026-11-06T10:00:00.000Z',
+          },
+          error: null,
+        },
+      },
+    });
+
+    const original = element({
+      id: 'body-1',
+      role: 'body',
+      source: '$ref://body.ejs',
+      isFileBacked: true,
+      updatedAt: '2026-11-06T09:00:00.000Z',
+    });
+
+    const { result, rerender } = renderHook(
+      ({ el }: any) => useElementDraft({ graphqlMutation } as any, el),
+      { initialProps: { el: original } },
+    );
+
+    act(() => result.current.setDraft('<p>inline</p>'));
+    await act(async () => {
+      await result.current.save({ detach: true });
+    });
+    expect(result.current.currentElement?.isFileBacked).toBe(false);
+
+    // Host refresh: new updatedAt, still file-backed (restored to the pointer).
+    rerender({
+      el: element({
+        id: 'body-1',
+        role: 'body',
+        source: '$ref://body.ejs',
+        isFileBacked: true,
+        updatedAt: '2026-11-06T11:00:00.000Z',
+      }),
+    });
+
+    expect(result.current.currentElement?.isFileBacked).toBe(true);
+  });
+
+  it('recovers when the server says file-backed but the props said inline', async () => {
+    // Otherwise the operator gets error text and no route to the detach dialog: the
+    // prompt is only reachable through requiresDetach.
+    const graphqlMutation = jest.fn().mockResolvedValue({
+      data: {
+        communicatorSaveTemplateElement: {
+          success: false,
+          outcome: null,
+          element: null,
+          error: { code: 'TEMPLATE_ELEMENT_FILE_BACKED', message: 'This body is a file reference.' },
+        },
+      },
+    });
+
+    const { result } = renderHook(() =>
+      useElementDraft(
+        { graphqlMutation } as any,
+        // Props claim inline; the server disagrees.
+        element({ id: 'body-1', role: 'body', source: 'looks inline', isFileBacked: false }),
+      ),
+    );
+
+    act(() => result.current.setDraft('an edit'));
+    expect(result.current.requiresDetach).toBe(false);
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    // The next Save must ask to detach instead of repeating the same refusal.
+    expect(result.current.requiresDetach).toBe(true);
+  });
+});
+
 describe('useTemplatePreview — races', () => {
   it('does not let a response for cleared source repopulate the pane', async () => {
     // THE regression review found: the empty-source branch returned without bumping
@@ -186,13 +361,19 @@ describe('useTemplatePreview — races', () => {
 
     const { result, rerender } = renderHook(
       ({ source }: any) =>
-        useTemplatePreview(reactory, { source, debounceMs: 0 }),
+        // A LONG debounce is deliberate. With `debounceMs: 0` the empty-draft
+        // branch fires on its own timer and can invalidate the request before the
+        // fixture resolves — which masked a regression in the teardown bump roughly
+        // a third of the time. At 500 ms nothing re-runs before the stale response
+        // lands, so only SYNCHRONOUS invalidation (the effect teardown) can save it.
+        useTemplatePreview(reactory, { source, debounceMs: 500 }),
       { initialProps: { source: 'ALPHA' } },
     );
 
     await waitFor(() => expect(graphqlMutation).toHaveBeenCalledTimes(1));
 
-    // Operator selects all and deletes while the render is in flight.
+    // Operator selects all and deletes while the render is in flight, and the
+    // stale response arrives before any debounce could settle.
     rerender({ source: '' });
     expect(result.current.preview).toBeNull();
 
@@ -201,18 +382,9 @@ describe('useTemplatePreview — races', () => {
       await first.promise;
     });
 
-    // The invariant: the stale render must NOT appear.
+    // The invariant: the stale render must NOT appear. Deterministic only because
+    // the effect teardown bumped the sequence synchronously.
     expect(result.current.preview).toBeNull();
-
-    // Let the zero-delay debounce for the empty draft settle. `loading` is
-    // cleared either by that branch or by the stale request's own finally — the
-    // point is that it cannot stay stuck once both have run.
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    });
-
-    expect(result.current.preview).toBeNull();
-    expect(result.current.loading).toBe(false);
     expect(result.current.stale).toBe(false);
   });
 

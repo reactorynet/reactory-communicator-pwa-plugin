@@ -100,9 +100,38 @@ export const useElementDraft = (
     undefined,
   );
 
+
   const [saving, setSaving] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const [lastOutcome, setLastOutcome] = useState<string | null>(null);
+
+  /**
+   * Alerts are keyed to the element that produced them.
+   *
+   * The draft was hardened for a keyless host; these were not, so a failed save on
+   * the subject showed its error on the body, and a save that resolved after a
+   * switch attributed its outcome to the other element.
+   */
+  const [errorState, setErrorState] = useState<{ elementId: string | undefined; message: string } | null>(null);
+  const [outcomeState, setOutcomeState] = useState<{ elementId: string | undefined; outcome: string } | null>(null);
+
+  const error = errorState?.elementId === elementId ? errorState.message : null;
+  const lastOutcome = outcomeState?.elementId === elementId ? outcomeState.outcome : null;
+  const setError = useCallback(
+    (message: string | null) => setErrorState(message === null ? null : { elementId, message }),
+    [elementId],
+  );
+  const setLastOutcome = useCallback(
+    (outcome: string | null) => setOutcomeState(outcome === null ? null : { elementId, outcome }),
+    [elementId],
+  );
+
+  /**
+   * A host that refreshes the prop for the same id has newer truth than our local
+   * adoption — drop it, or a `$ref` restored elsewhere leaves the editor believing
+   * the element is inline and unable to save.
+   */
+  useEffect(() => {
+    setSavedElement(undefined);
+  }, [elementId, element?.updatedAt]);
 
   const mountedRef = useRef<boolean>(true);
 
@@ -114,7 +143,12 @@ export const useElementDraft = (
   }, []);
 
   /** Derive, don't sync. See the docblock. */
-  const current = state.elementId === elementId ? state : freshState();
+  /**
+   * Keyed comparison, with a string check: two elements that both lack an id would
+   * otherwise compare equal (`undefined === undefined`) and share one draft.
+   */
+  const sameElement = typeof elementId === 'string' && state.elementId === elementId;
+  const current = sameElement ? state : freshState();
   const draft = current.draft;
   const acceptedSource = current.accepted;
 
@@ -179,6 +213,20 @@ export const useElementDraft = (
           const code = payload?.error?.code;
           const message = payload?.error?.message || 'Failed to save the element.';
           setError(message);
+
+          /**
+           * The server refused because the element is file-backed while our props
+           * said inline. Adopting a file-backed element arms the detach prompt, so
+           * the next Save asks instead of dead-ending on an error the operator has
+           * no way to act on.
+           *
+           * One mechanism, not two: an earlier `forceDetach` flag sat beside this and
+           * was provably redundant — removing it changed nothing the tests could see.
+           */
+          if (code === TEMPLATE_EDITOR_ERRORS.FILE_BACKED && currentElement) {
+            setSavedElement({ ...currentElement, isFileBacked: true });
+          }
+
           return { ok: false, code, message };
         }
 
@@ -188,17 +236,19 @@ export const useElementDraft = (
         setLastOutcome(payload?.outcome ?? 'saved');
 
         /**
-         * Adopt the server's view of the element. `isFileBacked` is the field that
-         * changes on a detach; without this the pane keeps warning about a file the
-         * element no longer reads and offers to convert it again.
+         * Adopt the server's view of the element wholesale.
          *
-         * Merged over the prop rather than replacing it: the mutation returns a
-         * narrow selection (no `refPath`, `refError`, `enabled`), and dropping those
-         * would blank the file-backed warning for an element that is still
-         * file-backed.
+         * `describeElement()` runs after `document.save()`, so this is the freshest
+         * description in the system, and the mutation now selects every field of the
+         * contract (see `communicator/graphql.ts`) — a merge is unnecessary and a
+         * partial merge is a class of bug this avoids entirely.
+         *
+         * `isFileBacked` is the field that changes on a detach; without adopting it
+         * the pane keeps warning about a file the element no longer reads and offers
+         * to convert it a second time.
          */
         if (payload?.element) {
-          setSavedElement({ ...(element as IEmailTemplateElement), ...payload.element });
+          setSavedElement(payload.element as IEmailTemplateElement);
         }
 
         return { ok: true, outcome: payload?.outcome };
