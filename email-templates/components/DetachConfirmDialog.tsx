@@ -86,10 +86,14 @@ export const DetachConfirmDialog: React.FC<DetachConfirmDialogProps> = ({
     </DialogContent>
 
     <DialogActions>
-      <Button onClick={onCancel} color="inherit">
+      {/*
+        Focus lands on the SAFE action. `autoFocus` on "Convert and save" meant a
+        reflex Enter performed the irreversible conversion.
+      */}
+      <Button onClick={onCancel} color="inherit" autoFocus>
         Keep reading the file
       </Button>
-      <Button onClick={onConfirm} variant="contained" color="warning" autoFocus>
+      <Button onClick={onConfirm} variant="contained" color="warning">
         Convert and save
       </Button>
     </DialogActions>

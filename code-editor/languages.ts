@@ -29,13 +29,20 @@
 
 import hljs from 'highlight.js/lib/core';
 import htmlLanguage from 'highlight.js/lib/languages/xml';
+import plaintextLanguage from 'highlight.js/lib/languages/plaintext';
 import jsonLanguage from 'highlight.js/lib/languages/json';
 import yamlLanguage from 'highlight.js/lib/languages/yaml';
 
-/** Grammars the communicator editors use. */
-export type CodeLanguage = 'html' | 'json' | 'yaml';
+/**
+ * Grammars the communicator editors use.
+ *
+ * `text` is `plaintext` on purpose: a `text` element is a subject line or a
+ * plain-text body, and colouring it as HTML would mark up prose that is not markup.
+ */
+export type CodeLanguage = 'html' | 'text' | 'json' | 'yaml';
 
 hljs.registerLanguage('html', htmlLanguage);
+hljs.registerLanguage('text', plaintextLanguage);
 hljs.registerLanguage('json', jsonLanguage);
 hljs.registerLanguage('yaml', yamlLanguage);
 

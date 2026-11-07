@@ -216,11 +216,14 @@ describe('TemplateEditorDrawer', () => {
     await userEvent.click(screen.getByRole('button', { name: /^save$/i }));
 
     await waitFor(() => expect(saveCalls(reactory)).toHaveLength(1));
+    // `detach` is sent explicitly false rather than omitted: the schema field is
+    // nullable today, but a later `Boolean!` would make every inline save fail
+    // variable validation. Pinned here so nobody "tidies" it away.
     expect(saveCalls(reactory)[0][1].input).toEqual({
       elementId: 'sub-1',
       source: 'New subject line',
+      detach: false,
     });
-    expect(saveCalls(reactory)[0][1].input.detach).toBeUndefined();
   });
 
   it('REFUSES to overwrite a file-backed element without confirmation', async () => {

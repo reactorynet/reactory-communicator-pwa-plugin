@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Button,
@@ -7,7 +7,6 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
-  Divider,
   Drawer,
   IconButton,
   Stack,
@@ -54,6 +53,7 @@ export const TemplateEditorDrawer: React.FC<TemplateEditorDrawerProps> = ({
   purpose,
   onSaved,
 }) => {
+  const viewId = view?.id ?? null;
   const elements: IEmailTemplateElement[] = useMemo(() => {
     if (!view) return [];
     return [view.subject, view.body, ...view.otherElements].filter(
@@ -62,7 +62,10 @@ export const TemplateEditorDrawer: React.FC<TemplateEditorDrawerProps> = ({
   }, [view]);
 
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [dirtyIds, setDirtyIds] = useState<Record<string, boolean>>({});
+  const [dirtyState, setDirtyState] = useState<{
+    viewId: string | null;
+    ids: Record<string, boolean>;
+  }>({ viewId, ids: {} });
   const [confirmClose, setConfirmClose] = useState<boolean>(false);
 
   /** Pending detach confirmation: the element and the promise's resolve. */
@@ -71,30 +74,62 @@ export const TemplateEditorDrawer: React.FC<TemplateEditorDrawerProps> = ({
   );
   const [detachElement, setDetachElement] = useState<IEmailTemplateElement | null>(null);
 
-  /** Reset per-view state when the drawer opens on a different template. */
-  const viewId = view?.id ?? null;
-  const previousViewId = useRef<string | null>(null);
-  if (previousViewId.current !== viewId) {
-    previousViewId.current = viewId;
-    // Derived-state-during-render: cheaper and race-free compared with an effect,
-    // which would briefly show the previous template's dirty flags.
-    if (Object.keys(dirtyIds).length > 0) setDirtyIds({});
-    if (activeId !== null && !elements.some((element) => element.id === activeId)) setActiveId(null);
-  }
+  /**
+   * Reset per-view state when the drawer opens on a different template.
+   *
+   * Keyed state rather than a ref mutation during render: writing a ref and calling
+   * setState mid-render works today but is not the supported form and does not
+   * survive concurrent rendering. `dirtyViewId` records which view the flags belong
+   * to, so a mismatch is derived away during render instead of corrected after it.
+   */
+  const dirtyIdsForView = dirtyState.viewId === viewId ? dirtyState.ids : {};
 
-  const resolvedActiveId = activeId ?? elements[0]?.id ?? null;
-  const anyDirty = Object.values(dirtyIds).some(Boolean);
+  const [activeViewId, setActiveViewId] = useState<string | null>(viewId);
+  const activeIdForView = activeViewId === viewId ? activeId : null;
 
-  const handleDirtyChange = useCallback((elementId: string, dirty: boolean) => {
-    setDirtyIds((current) => (current[elementId] === dirty ? current : { ...current, [elementId]: dirty }));
-  }, []);
+  const resolvedActiveId = activeIdForView ?? elements[0]?.id ?? null;
+  const anyDirty = Object.values(dirtyIdsForView).some(Boolean);
+
+  /**
+   * One reducer for the key check and the write.
+   *
+   * Doing `setDirtyIds(fn)` and then `setDirtyViewId(viewId)` separately let two
+   * reports in one batch both take the "different view" branch, so the first was
+   * dropped. Atomic here because `viewId` is captured in the update, not read after.
+   */
+  const handleDirtyChange = useCallback(
+    (elementId: string, dirty: boolean) => {
+      setDirtyState((current) =>
+        current.viewId === viewId
+          ? { viewId, ids: { ...current.ids, [elementId]: dirty } }
+          : { viewId, ids: { [elementId]: dirty } },
+      );
+    },
+    [viewId],
+  );
 
   const requestDetach = useCallback((element: IEmailTemplateElement): Promise<boolean> => {
+    // Settle any earlier request first. Without this a second request (two elements
+    // saving in one tick, or a double click landing before the modal paints — note
+    // `saving` is still false while the dialog is open) overwrites the pending
+    // resolver and leaves the first `handleSave` awaiting forever: no save, no
+    // error, and the dialog now describing the other element.
+    detachRef.current?.resolve(false);
+
     return new Promise<boolean>((resolve) => {
       detachRef.current = { element, resolve };
       setDetachElement(element);
     });
   }, []);
+
+  /** An unmount with a pending confirmation must not strand its caller. */
+  useEffect(
+    () => () => {
+      detachRef.current?.resolve(false);
+      detachRef.current = null;
+    },
+    [],
+  );
 
   const settleDetach = useCallback((ok: boolean) => {
     detachRef.current?.resolve(ok);
@@ -153,7 +188,10 @@ export const TemplateEditorDrawer: React.FC<TemplateEditorDrawerProps> = ({
         {elements.length > 1 ? (
           <Tabs
             value={resolvedActiveId ?? false}
-            onChange={(_event, value) => setActiveId(value)}
+            onChange={(_event, value) => {
+              setActiveId(value);
+              setActiveViewId(viewId);
+            }}
             variant="scrollable"
             allowScrollButtonsMobile
             sx={{ px: 2, borderBottom: 1, borderColor: 'divider' }}
@@ -165,7 +203,7 @@ export const TemplateEditorDrawer: React.FC<TemplateEditorDrawerProps> = ({
                 label={
                   <Stack direction="row" spacing={0.75} alignItems="center">
                     <span>{element.role}</span>
-                    {dirtyIds[element.id] ? (
+                    {dirtyIdsForView[element.id] ? (
                       <Box
                         component="span"
                         aria-label="unsaved changes"
