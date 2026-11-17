@@ -51,7 +51,9 @@ export const DetachConfirmDialog: React.FC<DetachConfirmDialogProps> = ({
 }) => (
   <Dialog open={open} onClose={onCancel} maxWidth="sm" fullWidth aria-labelledby="detach-dialog-title">
     <DialogTitle id="detach-dialog-title">
-      <Stack direction="row" spacing={1} alignItems="center">
+      <Stack direction="row" spacing={1} sx={{
+        alignItems: "center"
+      }}>
         <InsertDriveFileIcon color="warning" />
         <span>Convert this {role} to inline content?</span>
       </Stack>
@@ -69,7 +71,13 @@ export const DetachConfirmDialog: React.FC<DetachConfirmDialogProps> = ({
             {pointer}
           </Typography>
           {refPath ? (
-            <Typography component="div" variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+            <Typography
+              component="div"
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+                mt: 0.5
+              }}>
               resolved from {refPath}
             </Typography>
           ) : null}

@@ -60,7 +60,13 @@ export const EjsSourcePane: React.FC<EjsSourcePaneProps> = ({
             only. The file stays on disk, unchanged, but this application stops reading it.
           </Typography>
           {element.refError ? (
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+                mt: 1,
+                display: 'block'
+              }}>
               The file could not be resolved from this deployment: {element.refError}
             </Typography>
           ) : null}
