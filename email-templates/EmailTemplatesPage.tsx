@@ -127,35 +127,42 @@ export const EmailTemplatesPage: React.FC<EmailTemplatesPageProps> = ({ reactory
         <Paper sx={{ p: 2 }}>
           <Stack
             direction={{ xs: 'column', sm: 'row' }}
-            justifyContent="space-between"
-            alignItems={{ xs: 'stretch', sm: 'center' }}
             spacing={2}
-          >
+            sx={{
+              justifyContent: "space-between",
+              alignItems: { xs: 'stretch', sm: 'center' }
+            }}>
             <Box>
               <Typography variant="h5" component="h1">
                 Email templates
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" sx={{
+                color: "text.secondary"
+              }}>
                 Transactional templates used by the communicator. Subject and body are separate
                 elements; either can be stored inline or read from a file.
               </Typography>
             </Box>
 
-            <Stack direction="row" spacing={1} alignItems="center">
+            <Stack direction="row" spacing={1} sx={{
+              alignItems: "center"
+            }}>
               <TextField
                 size="small"
                 placeholder="Search templates"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon fontSize="small" />
-                    </InputAdornment>
-                  ),
-                }}
-                inputProps={{ 'aria-label': 'Search templates' }}
-              />
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon fontSize="small" />
+                      </InputAdornment>
+                    ),
+                  },
+
+                  htmlInput: { 'aria-label': 'Search templates' }
+                }} />
               <Tooltip title="Reload">
                 <span>
                   <IconButton onClick={reload} disabled={loading} aria-label="Reload templates">
@@ -190,7 +197,13 @@ export const EmailTemplatesPage: React.FC<EmailTemplatesPageProps> = ({ reactory
                 {rows.length === 0 && !loading ? (
                   <TableRow>
                     <TableCell colSpan={6}>
-                      <Typography variant="body2" color="text.secondary" sx={{ py: 3 }} align="center">
+                      <Typography
+                        variant="body2"
+                        align="center"
+                        sx={{
+                          color: "text.secondary",
+                          py: 3
+                        }}>
                         {search.trim()
                           ? `No templates match “${search.trim()}”.`
                           : 'No email templates are configured for this application.'}
@@ -212,13 +225,17 @@ export const EmailTemplatesPage: React.FC<EmailTemplatesPageProps> = ({ reactory
                     <TableCell>
                       <Typography variant="body2">{view.name}</Typography>
                       {view.description ? (
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography variant="caption" sx={{
+                          color: "text.secondary"
+                        }}>
                           {view.description}
                         </Typography>
                       ) : null}
                     </TableCell>
                     <TableCell>
-                      <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                      <Stack direction="row" spacing={0.5} useFlexGap sx={{
+                        flexWrap: "wrap"
+                      }}>
                         <ElementBadge element={view.subject} label="Subject" />
                         <ElementBadge element={view.body} label="Body" />
                         {view.otherElements.map((element) => (
@@ -269,9 +286,13 @@ export const EmailTemplatesPage: React.FC<EmailTemplatesPageProps> = ({ reactory
         />
 
         {loading && rows.length === 0 ? (
-          <Stack direction="row" spacing={1.5} alignItems="center" role="status" aria-live="polite">
+          <Stack direction="row" spacing={1.5} role="status" aria-live="polite" sx={{
+            alignItems: "center"
+          }}>
             <CircularProgress size={18} />
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: "text.secondary"
+            }}>
               Loading email templates…
             </Typography>
           </Stack>

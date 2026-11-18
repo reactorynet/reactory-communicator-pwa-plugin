@@ -103,7 +103,14 @@ export const ElementEditor: React.FC<ElementEditorProps> = ({
 
   return (
     <Stack spacing={2}>
-      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+      <Stack
+        direction="row"
+        spacing={1}
+        useFlexGap
+        sx={{
+          alignItems: "center",
+          flexWrap: "wrap"
+        }}>
         <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
           {shown.name || shown.role}
         </Typography>
@@ -159,13 +166,17 @@ export const ElementEditor: React.FC<ElementEditorProps> = ({
         />
       </Box>
 
-      <Stack direction="row" spacing={1} justifyContent="flex-end">
+      <Stack direction="row" spacing={1} sx={{
+        justifyContent: "flex-end"
+      }}>
         {lastOutcome === 'detached-and-saved' ? (
           <Typography
             variant="caption"
-            color="text.secondary"
-            sx={{ alignSelf: 'center', mr: 'auto' }}
-          >
+            sx={{
+              color: "text.secondary",
+              alignSelf: 'center',
+              mr: 'auto'
+            }}>
             Last save converted this element from a file to inline content.
           </Typography>
         ) : null}
