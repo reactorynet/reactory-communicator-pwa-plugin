@@ -14,7 +14,7 @@
  */
 import { act, waitFor } from '@testing-library/react';
 // React 17 + @testing-library/react v12: renderHook ships separately.
-import { renderHook } from '@testing-library/react-hooks';
+import { renderHook } from '@testing-library/react';
 
 import { useElementDraft } from '../email-templates/hooks/useElementDraft';
 import { useTemplatePreview } from '../communicator/hooks/useTemplatePreview';
