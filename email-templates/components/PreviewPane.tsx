@@ -95,14 +95,25 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
    * by editing the draft.
    */
   const header = (
-    <Stack direction="row" alignItems="center" justifyContent="space-between">
-      <Typography variant="subtitle2" color="text.secondary">
+    <Stack
+      direction="row"
+      sx={{
+        alignItems: "center",
+        justifyContent: "space-between"
+      }}>
+      <Typography variant="subtitle2" sx={{
+        color: "text.secondary"
+      }}>
         Preview {isSubject ? '(subject line)' : '(as the recipient sees it)'}
       </Typography>
 
-      <Stack direction="row" spacing={1} alignItems="center">
+      <Stack direction="row" spacing={1} sx={{
+        alignItems: "center"
+      }}>
         {stale ? (
-          <Typography variant="caption" color="warning.main">
+          <Typography variant="caption" sx={{
+            color: "warning.main"
+          }}>
             out of date
           </Typography>
         ) : null}
@@ -135,7 +146,13 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
           <Typography variant="body2" component="div">
             {error}
           </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+              mt: 1,
+              display: 'block'
+            }}>
             The template is still saved as it was — a render failure here does not change it.
           </Typography>
         </Alert>
@@ -154,7 +171,9 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
         about nothing.
       */}
       {isSubject ? null : (
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{
+          color: "text.secondary"
+        }}>
           Remote images load over https only; scripts and forms are blocked. This is the
           server-rendered output, not a client-side approximation.
         </Typography>

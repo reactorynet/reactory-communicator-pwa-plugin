@@ -151,31 +151,37 @@ export const TemplateEditorDrawer: React.FC<TemplateEditorDrawerProps> = ({
         anchor="right"
         open={open}
         onClose={attemptClose}
-        PaperProps={{
-          sx: {
-            width: { xs: '100vw', md: '90vw', lg: '80vw' },
-            maxWidth: 1500,
-            display: 'flex',
-            flexDirection: 'column',
-          },
+        slotProps={{
+          paper: {
+            sx: {
+              width: { xs: '100vw', md: '90vw', lg: '80vw' },
+              maxWidth: 1500,
+              display: 'flex',
+              flexDirection: 'column',
+            },
+          }
         }}
       >
         <Stack
           direction="row"
-          justifyContent="space-between"
-          alignItems="center"
-          sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}
-        >
+          sx={{
+            justifyContent: "space-between",
+            alignItems: "center",
+            p: 2,
+            borderBottom: 1,
+            borderColor: 'divider'
+          }}>
           <Box sx={{ minWidth: 0 }}>
             <Typography variant="h6" sx={{ fontWeight: 600 }} noWrap>
               {view ? view.name : 'Email template'}
             </Typography>
             <Typography
               variant="caption"
-              color="text.secondary"
-              sx={{ fontFamily: 'monospace' }}
               component="div"
-            >
+              sx={{
+                color: "text.secondary",
+                fontFamily: 'monospace'
+              }}>
               {view?.view}
             </Typography>
           </Box>
@@ -201,7 +207,9 @@ export const TemplateEditorDrawer: React.FC<TemplateEditorDrawerProps> = ({
                 key={element.id}
                 value={element.id}
                 label={
-                  <Stack direction="row" spacing={0.75} alignItems="center">
+                  <Stack direction="row" spacing={0.75} sx={{
+                    alignItems: "center"
+                  }}>
                     <span>{element.role}</span>
                     {dirtyIdsForView[element.id] ? (
                       <Box
@@ -225,7 +233,9 @@ export const TemplateEditorDrawer: React.FC<TemplateEditorDrawerProps> = ({
 
         <Box sx={{ flexGrow: 1, overflow: 'auto', p: { xs: 1.5, sm: 2.5 } }}>
           {elements.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: "text.secondary"
+            }}>
               This template has no editable elements.
             </Typography>
           ) : null}
